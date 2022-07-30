@@ -166,6 +166,10 @@ stock LoadMap(mapname[])
 		{
 			sscanf(templine, "iffffffiI(-1)I(-1)F(300.0)F(300.0)I(-1)I(0)", model, x, y, z, rx, ry, rz, world, interior, playerid, streamdist, drawdist, areaid, priority);
 			tempobj = CreateDynamicObject(model, x, y, z, rx, ry, rz, world, interior, playerid, streamdist, drawdist, STREAMER_TAG_AREA:areaid, priority);
+			
+			#if defined CA_CreateObject
+				CA_CreateObject(model, x, y, z, rx, ry, rz, false);
+			#endif
 
 			mapobject[MAP_OBJ_EXTRA_OFFSET] = -5;
 			mapobject[MAP_OBJ_EXTRA_MAPID] = mapindex;
