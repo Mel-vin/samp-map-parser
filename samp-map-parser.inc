@@ -56,6 +56,7 @@ static enum _:MAP_DATA
 {
 	MapName[MAX_MAP_NAME],
 	List:MapObjects,
+	List:CollisionObjects,
 	List:RemovedBuildings
 };
 
@@ -115,6 +116,7 @@ stock LoadMap(mapname[])
 	strreplace(mapname, MAP_FILE_EXTENSION, "", false, 0, -1, MAX_MAP_NAME);
 	format(map[MapName], MAX_MAP_NAME, mapname);
 	map[MapObjects] = list_new();
+	map[CollisionObjects] = list_new();
 	map[RemovedBuildings] = list_new();
 	mapindex = pool_add_arr(Maps, map);
 
@@ -167,8 +169,8 @@ stock LoadMap(mapname[])
 			sscanf(templine, "iffffffiI(-1)I(-1)F(300.0)F(300.0)I(-1)I(0)", model, x, y, z, rx, ry, rz, world, interior, playerid, streamdist, drawdist, areaid, priority);
 			tempobj = CreateDynamicObject(model, x, y, z, rx, ry, rz, world, interior, playerid, streamdist, drawdist, STREAMER_TAG_AREA:areaid, priority);
 			
-			#if defined CA_CreateObject
-				CA_CreateObject(model, x, y, z, rx, ry, rz, false);
+			#if defined CA_CreateObject_DC
+				list_add(map[CollisionObjects], _:CA_CreateObject_DC(model, x, y, z, rx, ry, rz, drawdist));
 			#endif
 
 			mapobject[MAP_OBJ_EXTRA_OFFSET] = -5;
@@ -184,6 +186,7 @@ stock LoadMap(mapname[])
 	{
 		printf("[MAP PARSER] %s did not contain any valid objects.", mapname);
 		list_delete(map[MapObjects]);
+		list_delete(map[CollisionObjects]);
 		list_delete(map[RemovedBuildings]);
 		pool_remove(Maps, mapindex);
 	}
@@ -213,6 +216,17 @@ stock UnloadMap(mapid)
 		}
 	}
 
+	#if defined CA_DestroyObject_DC
+	if(list_valid(map[CollisionObjects]))
+	{
+		for(new Iter:i = list_iter(map[CollisionObjects]); iter_inside(i); iter_erase(i))
+		{
+			CA_DestroyObject_DC(iter_get(i));
+		}
+	}
+	#endif
+
+	if(list_valid(map[CollisionObjects])) list_delete(map[CollisionObjects]);
 	if(list_valid(map[MapObjects])) list_delete(map[MapObjects]);
 	if(list_valid(map[RemovedBuildings])) list_delete(map[RemovedBuildings]);
 	pool_remove(Maps, mapid);
@@ -228,7 +242,15 @@ stock ReprocessMaps()
 		{
 			DestroyDynamicObject(STREAMER_TAG_OBJECT:iter_get(m));
 		}
+		#if defined CA_DestroyObject_DC
+		for(new Iter:c = list_iter(map[CollisionObjects]); iter_inside(c); iter_erase(c))
+		{
+			CA_DestroyObject_DC(iter_get(c));
+		}
+		#endif
+		
 		list_delete(map[MapObjects]);
+		list_delete(map[CollisionObjects]);
 		list_delete(map[RemovedBuildings]);
 	}
 
@@ -411,14 +433,27 @@ stock ExportMap(mapid)
 
 stock MoveMapObjects(mapid, Float:xoffset, Float:yoffset, Float:zoffset)
 {
-	for(new Iter:i = list_iter(List:pool_get(Maps, mapid, MapObjects)), Float:x, Float:y, Float:z, STREAMER_TAG_OBJECT:objectid; iter_inside(i); iter_move_next(i))
-	{
-		objectid = STREAMER_TAG_OBJECT:iter_get(i);
-		if(!IsValidDynamicObject(objectid)) continue;
+	if(!pool_has(Maps, mapid)) return true;
 
-		GetDynamicObjectPos(objectid, x, y, z);
-		SetDynamicObjectPos(objectid, x + xoffset, y + yoffset, z + zoffset);
+	new map[MAP_DATA];
+	pool_get_arr(Maps, mapid, map);
+
+	if(list_valid(map[MapObjects]))
+	{
+		for(new Iter:i = list_iter(map[MapObjects]), Float:x, Float:y, Float:z, STREAMER_TAG_OBJECT:objectid; iter_inside(i); iter_move_next(i))
+		{
+			objectid = STREAMER_TAG_OBJECT:iter_get(i);
+			if(!IsValidDynamicObject(objectid)) continue;
+
+			GetDynamicObjectPos(objectid, x, y, z);
+			SetDynamicObjectPos(objectid, x + xoffset, y + yoffset, z + zoffset);
+
+			#if defined CA_SetObjectPos_DC
+				CA_SetObjectPos_DC(list_get(map[CollisionObjects], i), x + xoffset, y + yoffset, z + zoffset);
+			#endif
+		}
 	}
+	return true;
 }
 
 static stock RemoveNewBuildings(mapid)
